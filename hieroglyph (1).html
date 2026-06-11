@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hieroglyph Translator</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+
+  :root {
+    --gold: #c9a84c;
+    --gold-light: #e8c97a;
+    --gold-dark: #8b6914;
+    --sand: #f5e6c8;
+    --sand-dark: #e8d4a0;
+    --stone: #2a1f0e;
+    --stone-mid: #4a3820;
+    --stone-light: #6b5230;
+    --ink: #1a1208;
+    --red-accent: #8b2020;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--stone);
+    color: var(--sand);
+    font-family: 'EB Garamond', Georgia, serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: repeating-linear-gradient(90deg, var(--gold) 0px, var(--gold) 8px, var(--gold-dark) 8px, var(--gold-dark) 16px);
+    z-index: 100;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(ellipse at 20% 50%, rgba(201,168,76,0.04) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 20%, rgba(201,168,76,0.03) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 0 24px 60px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .api-bars {
+    background: var(--ink);
+    border-bottom: 1px solid var(--gold-dark);
+    padding: 10px 0;
+    position: sticky;
+    top: 4px;
+    z-index: 50;
+  }
+
+  .api-bar-inner {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 5px 24px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .api-label {
+    font-family: 'Cinzel', serif;
+    font-size: 10px;
+    color: var(--gold);
+    letter-spacing: 0.12em;
+    white-space: nowrap;
+    text-transform: uppercase;
+    min-width: 130px;
+  }
+
+  .api-input {
+    flex: 1;
+    background: rgba(201,168,76,0.08);
+    border: 1px solid var(--gold-dark);
+    border-radius: 4px;
+    padding: 6px 10px;
+    color: var(--sand);
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .api-input:focus { border-color: var(--gold); }
+  .api-input::placeholder { color: var(--stone-light); }
+
+  .api-save {
+    background: var(--gold-dark);
+    color: var(--sand);
+    border: none;
+    border-radius: 4px;
+    padding: 6px 14px;
+    font-family: 'Cinzel', serif;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+  }
+
+  .api-save:hover { background: var(--gold); color: var(--ink); }
+
+  .api-status { font-size: 11px; white-space: nowrap; min-width: 60px; }
+  .api-status.ok { color: #6bcf6b; }
+  .api-status.no { color: #c88; }
+
+  .api-divider { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+  .api-divider hr { border: none; border-top: 1px solid rgba(201,168,76,0.15); margin: 2px 0; }
+
+  header { text-align: center; padding: 48px 0 32px; }
+
+  .eye-of-ra {
+    font-size: 40px;
+    margin-bottom: 12px;
+    display: block;
+    filter: drop-shadow(0 0 12px rgba(201,168,76,0.4));
+  }
+
+  h1 {
+    font-family: 'Cinzel', serif;
+    font-size: clamp(28px, 5vw, 42px);
+    font-weight: 900;
+    color: var(--gold);
+    letter-spacing: 0.12em;
+    line-height: 1.1;
+    text-shadow: 0 2px 20px rgba(201,168,76,0.3);
+  }
+
+  .subtitle { font-style: italic; color: var(--sand-dark); font-size: 16px; margin-top: 8px; opacity: 0.8; }
+
+  .divider { display: flex; align-items: center; gap: 16px; margin: 28px 0; }
+  .divider-line { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, var(--gold-dark), transparent); }
+  .divider-symbol { color: var(--gold); font-size: 18px; }
+
+  .mode-tabs {
+    display: flex;
+    margin-bottom: 28px;
+    border: 1px solid var(--gold-dark);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .mode-tab {
+    flex: 1; padding: 12px;
+    background: transparent; border: none;
+    color: var(--stone-light); font-family: 'Cinzel', serif;
+    font-size: 12px; letter-spacing: 0.12em;
+    cursor: pointer; transition: all 0.2s; text-transform: uppercase;
+  }
+
+  .mode-tab:not(:last-child) { border-right: 1px solid var(--gold-dark); }
+  .mode-tab.active { background: var(--gold-dark); color: var(--sand); }
+  .mode-tab:hover:not(.active) { background: rgba(201,168,76,0.08); color: var(--gold); }
+
+  .upload-area {
+    border: 2px dashed var(--gold-dark);
+    border-radius: 8px;
+    padding: 40px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    background: rgba(201,168,76,0.03);
+    position: relative;
+    margin-bottom: 16px;
+  }
+
+  .upload-area:hover, .upload-area.dragover { border-color: var(--gold); background: rgba(201,168,76,0.07); }
+  .upload-area input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .upload-icon { font-size: 36px; margin-bottom: 12px; display: block; }
+  .upload-text { font-family: 'Cinzel', serif; font-size: 14px; color: var(--gold); letter-spacing: 0.08em; margin-bottom: 6px; }
+  .upload-sub { font-size: 13px; color: var(--stone-light); font-style: italic; }
+
+  .camera-toggle {
+    width: 100%; padding: 12px;
+    background: rgba(201,168,76,0.08); border: 1px solid var(--gold-dark);
+    border-radius: 6px; color: var(--gold); font-family: 'Cinzel', serif;
+    font-size: 12px; letter-spacing: 0.1em; cursor: pointer;
+    transition: all 0.2s; text-transform: uppercase; margin-bottom: 16px;
+  }
+  .camera-toggle:hover { background: rgba(201,168,76,0.15); border-color: var(--gold); }
+
+  .camera-view { display: none; margin-bottom: 16px; border-radius: 8px; overflow: hidden; border: 1px solid var(--gold-dark); }
+  .camera-view.active { display: block; }
+  #videoFeed { width: 100%; display: block; background: #000; max-height: 400px; object-fit: cover; }
+  .camera-controls { display: flex; gap: 10px; padding: 12px; background: var(--ink); }
+
+  .btn-capture {
+    flex: 1; padding: 12px;
+    background: var(--gold-dark); border: none; border-radius: 6px;
+    color: var(--sand); font-family: 'Cinzel', serif; font-size: 13px;
+    letter-spacing: 0.08em; cursor: pointer; transition: all 0.2s;
+  }
+  .btn-capture:hover { background: var(--gold); color: var(--ink); }
+
+  .btn-close-cam {
+    padding: 12px 16px;
+    background: rgba(139,32,32,0.3); border: 1px solid var(--red-accent);
+    border-radius: 6px; color: #c88; font-family: 'Cinzel', serif;
+    font-size: 12px; cursor: pointer; transition: all 0.2s;
+  }
+  .btn-close-cam:hover { background: rgba(139,32,32,0.6); }
+
+  .preview-section { display: none; margin-bottom: 16px; }
+  .preview-section.active { display: block; }
+  .preview-label { font-family: 'Cinzel', serif; font-size: 11px; color: var(--gold-dark); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 8px; }
+  .preview-wrap { position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--gold-dark); display: inline-block; width: 100%; }
+  #previewImg { width: 100%; max-height: 320px; object-fit: contain; display: block; background: #111; }
+
+  .preview-clear {
+    position: absolute; top: 8px; right: 8px;
+    background: rgba(0,0,0,0.7); border: 1px solid var(--red-accent);
+    color: #c88; border-radius: 4px; padding: 4px 10px;
+    font-size: 11px; cursor: pointer; font-family: 'Cinzel', serif;
+    letter-spacing: 0.08em; transition: all 0.2s;
+  }
+  .preview-clear:hover { background: rgba(139,32,32,0.6); }
+
+  .btn-analyse {
+    width: 100%; padding: 16px;
+    background: linear-gradient(135deg, var(--gold-dark), var(--gold));
+    border: none; border-radius: 6px; color: var(--ink);
+    font-family: 'Cinzel', serif; font-size: 15px; font-weight: 600;
+    letter-spacing: 0.15em; text-transform: uppercase;
+    cursor: pointer; transition: all 0.3s; margin-bottom: 28px;
+  }
+  .btn-analyse:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(201,168,76,0.3); }
+  .btn-analyse:disabled { background: var(--stone-mid); color: var(--stone-light); cursor: not-allowed; transform: none; box-shadow: none; }
+  .btn-analyse .loading-text { display: none; }
+  .btn-analyse.loading .normal-text { display: none; }
+  .btn-analyse.loading .loading-text { display: inline; }
+
+  .status-box {
+    background: rgba(201,168,76,0.06); border: 1px solid var(--gold-dark);
+    border-radius: 8px; padding: 14px 20px; margin-bottom: 16px;
+    display: none; align-items: center; gap: 12px;
+    font-size: 14px; color: var(--sand-dark); font-style: italic;
+  }
+  .status-box.active { display: flex; }
+
+  .spinner {
+    width: 16px; height: 16px; flex-shrink: 0;
+    border: 2px solid var(--stone-mid); border-top-color: var(--gold);
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .retry-count { font-size: 11px; color: var(--stone-light); margin-left: auto; }
+
+  .error-box {
+    background: rgba(139,32,32,0.15); border: 1px solid var(--red-accent);
+    border-radius: 8px; padding: 16px 20px; color: #c88;
+    font-size: 14px; margin-bottom: 16px; display: none;
+  }
+  .error-box.active { display: block; }
+
+  .results { display: none; animation: fadeIn 0.4s ease; }
+  .results.active { display: block; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+  .result-section {
+    background: rgba(201,168,76,0.04); border: 1px solid var(--gold-dark);
+    border-radius: 8px; padding: 20px 24px; margin-bottom: 16px;
+  }
+
+  .result-title {
+    font-family: 'Cinzel', serif; font-size: 11px; color: var(--gold);
+    letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 16px;
+    padding-bottom: 10px; border-bottom: 1px solid rgba(201,168,76,0.2);
+  }
+
+  .single-result { display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: start; }
+  .glyph-letter-big { font-family: 'Cinzel', serif; font-size: 72px; font-weight: 900; color: var(--gold); line-height: 1; text-shadow: 0 0 30px rgba(201,168,76,0.4); }
+  .glyph-info-name { font-family: 'Cinzel', serif; font-size: 20px; color: var(--sand); margin-bottom: 6px; }
+  .confidence-bar-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .confidence-bar { flex: 1; height: 4px; background: var(--stone-mid); border-radius: 2px; overflow: hidden; }
+  .confidence-fill { height: 100%; background: linear-gradient(90deg, var(--gold-dark), var(--gold)); border-radius: 2px; }
+  .confidence-pct { font-size: 13px; color: var(--gold); font-family: 'Cinzel', serif; white-space: nowrap; }
+  .glyph-explanation { font-size: 14px; color: var(--sand-dark); font-style: italic; line-height: 1.6; }
+
+  .glyph-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .glyph-table th { font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 0.12em; color: var(--gold-dark); text-align: left; padding: 0 8px 10px; text-transform: uppercase; }
+  .glyph-table td { padding: 8px; border-top: 1px solid rgba(201,168,76,0.1); vertical-align: middle; }
+  .glyph-table .num { color: var(--stone-light); font-size: 12px; }
+  .glyph-table .letter-cell { font-family: 'Cinzel', serif; font-size: 22px; color: var(--gold); font-weight: 600; }
+  .glyph-table .name-cell { color: var(--sand-dark); }
+  .conf-mini-wrap { display: flex; align-items: center; gap: 8px; }
+  .conf-mini-bar { width: 60px; height: 3px; background: var(--stone-mid); border-radius: 2px; overflow: hidden; }
+  .conf-mini-fill { height: 100%; background: linear-gradient(90deg, var(--gold-dark), var(--gold)); }
+  .conf-mini-pct { font-size: 12px; color: var(--stone-light); }
+
+  .combined-letters { font-family: 'Cinzel', serif; font-size: 28px; color: var(--sand); letter-spacing: 0.08em; margin-bottom: 6px; }
+  .combined-raw { font-size: 13px; color: var(--stone-light); font-style: italic; }
+  .result-sentence { font-family: 'Cinzel', serif; font-size: 32px; color: var(--gold); letter-spacing: 0.06em; text-shadow: 0 0 20px rgba(201,168,76,0.3); }
+  .result-emoji { font-size: 24px; margin-left: 8px; }
+  .correcting-spinner { display: inline-flex; align-items: center; gap: 8px; color: var(--stone-light); font-style: italic; font-size: 14px; }
+
+  canvas { display: none; }
+</style>
+</head>
+<body>
+
+<div class="api-bars">
+  <div class="api-bar-inner">
+    <span class="api-label">🔍 Decipher Key</span>
+    <input type="password" class="api-input" id="apiKey1Input" placeholder="AIza... (used for identifying glyphs)">
+    <button class="api-save" onclick="saveApiKey(1)">Save</button>
+    <span class="api-status" id="apiStatus1"></span>
+  </div>
+  <div class="api-divider"><hr></div>
+  <div class="api-bar-inner">
+    <span class="api-label">💬 Sentence Key</span>
+    <input type="password" class="api-input" id="apiKey2Input" placeholder="AIza... (used for word correction)">
+    <button class="api-save" onclick="saveApiKey(2)">Save</button>
+    <span class="api-status" id="apiStatus2"></span>
+  </div>
+</div>
+
+<div class="container">
+  <header>
+    <span class="eye-of-ra">𓂀</span>
+    <h1>Hieroglyph Translator</h1>
+    <p class="subtitle">Decipher the ancient script</p>
+  </header>
+
+  <div class="divider">
+    <div class="divider-line"></div>
+    <span class="divider-symbol">𓆣</span>
+    <div class="divider-line"></div>
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" onclick="setMode('single')" id="tab-single">Single Glyph</button>
+    <button class="mode-tab" onclick="setMode('sentence')" id="tab-sentence">Full Sentence</button>
+  </div>
+
+  <div class="upload-area" id="uploadArea">
+    <input type="file" id="fileInput" accept="image/*" onchange="handleFile(this.files[0])">
+    <span class="upload-icon">𓃀</span>
+    <div class="upload-text">Drop image here or click to upload</div>
+    <div class="upload-sub">PNG, JPG, WEBP supported</div>
+  </div>
+
+  <button class="camera-toggle" onclick="toggleCamera()" id="cameraToggleBtn">📷 &nbsp; Open Camera</button>
+
+  <div class="camera-view" id="cameraView">
+    <video id="videoFeed" autoplay playsinline></video>
+    <div class="camera-controls">
+      <button class="btn-capture" onclick="capturePhoto()">📸 &nbsp; Capture Photo</button>
+      <button class="btn-close-cam" onclick="closeCamera()">✕ Close</button>
+    </div>
+  </div>
+
+  <div class="preview-section" id="previewSection">
+    <div class="preview-label">Selected Image</div>
+    <div class="preview-wrap">
+      <img id="previewImg" src="" alt="Preview">
+      <button class="preview-clear" onclick="clearImage()">✕ Clear</button>
+    </div>
+  </div>
+
+  <canvas id="captureCanvas"></canvas>
+
+  <button class="btn-analyse" id="analyseBtn" onclick="analyse()">
+    <span class="normal-text">𓂀 &nbsp; Translate Hieroglyphs</span>
+    <span class="loading-text">⏳ &nbsp; Consulting the ancients...</span>
+  </button>
+
+  <div class="status-box" id="statusBox">
+    <div class="spinner"></div>
+    <span id="statusText">Working...</span>
+    <span class="retry-count" id="retryCount"></span>
+  </div>
+
+  <div class="error-box" id="errorBox"></div>
+  <div class="results" id="results"></div>
+</div>
+
+<script>
+let currentMode = 'single';
+let currentImageData = null;
+let currentMime = 'image/png';
+let cameraStream = null;
+let apiKey1 = localStorage.getItem('gemini_key1') || '';
+let apiKey2 = localStorage.getItem('gemini_key2') || '';
+
+const RETRY_DELAY_MS = 3000;
+const MAX_RETRIES = 10;
+const FATAL_ERRORS = [400, 401, 403, 404];
+
+window.onload = () => {
+  if (apiKey1) { document.getElementById('apiKey1Input').value = apiKey1; setStatus(1, true); }
+  if (apiKey2) { document.getElementById('apiKey2Input').value = apiKey2; setStatus(2, true); }
+  setupDragDrop();
+};
+
+function setStatus(n, ok) {
+  const el = document.getElementById('apiStatus' + n);
+  el.textContent = ok ? '✓ Saved' : '✗ Empty';
+  el.className = 'api-status ' + (ok ? 'ok' : 'no');
+}
+
+function saveApiKey(n) {
+  const val = document.getElementById('apiKey' + n + 'Input').value.trim();
+  if (n === 1) { apiKey1 = val; localStorage.setItem('gemini_key1', val); }
+  else { apiKey2 = val; localStorage.setItem('gemini_key2', val); }
+  setStatus(n, !!val);
+}
+
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('tab-single').classList.toggle('active', mode === 'single');
+  document.getElementById('tab-sentence').classList.toggle('active', mode === 'sentence');
+  document.getElementById('results').classList.remove('active');
+}
+
+function setupDragDrop() {
+  const area = document.getElementById('uploadArea');
+  area.addEventListener('dragover', e => { e.preventDefault(); area.classList.add('dragover'); });
+  area.addEventListener('dragleave', () => area.classList.remove('dragover'));
+  area.addEventListener('drop', e => {
+    e.preventDefault(); area.classList.remove('dragover');
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+}
+
+function handleFile(file) {
+  if (!file) return;
+  currentMime = file.type || 'image/png';
+  const reader = new FileReader();
+  reader.onload = e => {
+    currentImageData = e.target.result.split(',')[1];
+    showPreview(e.target.result);
+  };
+  reader.readAsDataURL(file);
+}
+
+function showPreview(src) {
+  document.getElementById('previewImg').src = src;
+  document.getElementById('previewSection').classList.add('active');
+  document.getElementById('results').classList.remove('active');
+  document.getElementById('errorBox').classList.remove('active');
+}
+
+function clearImage() {
+  currentImageData = null;
+  document.getElementById('previewSection').classList.remove('active');
+  document.getElementById('previewImg').src = '';
+  document.getElementById('fileInput').value = '';
+  document.getElementById('results').classList.remove('active');
+}
+
+async function toggleCamera() {
+  const view = document.getElementById('cameraView');
+  if (view.classList.contains('active')) { closeCamera(); return; }
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    document.getElementById('videoFeed').srcObject = cameraStream;
+    view.classList.add('active');
+    document.getElementById('cameraToggleBtn').innerHTML = '📷 &nbsp; Camera Active';
+  } catch(e) { showError('Camera access denied: ' + e.message); }
+}
+
+function closeCamera() {
+  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  document.getElementById('cameraView').classList.remove('active');
+  document.getElementById('cameraToggleBtn').innerHTML = '📷 &nbsp; Open Camera';
+}
+
+function capturePhoto() {
+  const video = document.getElementById('videoFeed');
+  const canvas = document.getElementById('captureCanvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  const dataUrl = canvas.toDataURL('image/png');
+  currentImageData = dataUrl.split(',')[1];
+  currentMime = 'image/png';
+  showPreview(dataUrl);
+  closeCamera();
+}
+
+function showError(msg) {
+  const box = document.getElementById('errorBox');
+  box.textContent = msg;
+  box.classList.add('active');
+}
+
+function setStatusBox(msg, retryInfo) {
+  document.getElementById('statusBox').classList.add('active');
+  document.getElementById('statusText').textContent = msg;
+  document.getElementById('retryCount').textContent = retryInfo || '';
+}
+
+function hideStatusBox() {
+  document.getElementById('statusBox').classList.remove('active');
+  document.getElementById('retryCount').textContent = '';
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function callGeminiWithRetry(payloadObj, apiKey, label) {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    setStatusBox(
+      attempt === 1 ? label + '...' : label + '... retrying',
+      attempt > 1 ? 'Attempt ' + attempt + '/' + MAX_RETRIES : ''
+    );
+
+    const resp = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payloadObj) }
+    );
+
+    if (resp.ok) {
+      const data = await resp.json();
+      return data.candidates[0].content.parts[0].text.trim();
+    }
+
+    const status = resp.status;
+
+    if (status === 429) {
+      const body = await resp.json().catch(() => ({}));
+      const isQuota = JSON.stringify(body).toLowerCase().includes('quota');
+      if (isQuota) throw new Error('API quota exhausted — please check your Gemini plan (' + status + ')');
+      // rate limit — retryable, fall through
+    } else if (FATAL_ERRORS.includes(status)) {
+      let msg = 'API error ' + status;
+      if (status === 401 || status === 403) msg = 'API key invalid or no permission (' + status + ')';
+      else if (status === 400) msg = 'Bad request — check your API key (' + status + ')';
+      throw new Error(msg);
+    }
+
+    if (attempt < MAX_RETRIES) {
+      setStatusBox(label + '... server busy, waiting to retry', 'Attempt ' + attempt + '/' + MAX_RETRIES);
+      await sleep(RETRY_DELAY_MS * attempt);
+    } else {
+      throw new Error('Failed after ' + MAX_RETRIES + ' attempts (last error: HTTP ' + status + ')');
+    }
+  }
+}
+
+// ── FULL DETAILED ALPHABET (same as terminal version) ──
+const ALPHABET = `
+STUDY EVERY DESCRIPTION CAREFULLY. These are based on the EXACT appearance of each symbol.
+Match what you see in the image to these precise descriptions.
+
+MOST IMPORTANT RULE BEFORE ANYTHING ELSE:
+- If a shape has LINES INSIDE it could be I or Y or K
+- If a shape has NO LINES INSIDE and is a curved outline it could be Q S T R or O
+- ALWAYS check the OVERALL SHAPE first before deciding
+- A BOWL shape with lines inside = K not I
+- A LEAF shape with lines inside = I or Y
+
+A (Vulture):
+- A LARGE DETAILED bird standing and facing RIGHT
+- Has a long pointed BEAK facing right
+- Body has clear VERTICAL STRIPE MARKINGS on chest
+- Wings have DIAGONAL stripe markings
+- Has a visible TAIL pointing right at the back
+- Two LEGS visible at the bottom
+- Much LARGER and more DETAILED than W
+- Key: LARGE + DETAILED stripes on body + long beak + facing RIGHT + STANDING
+
+B (Foot and Leg):
+- Shows a complete human LEG and FOOT
+- The LEG is TALL and STRAIGHT going upward like a rectangular column
+- At the BOTTOM the FOOT extends to the RIGHT
+- Overall shape like the letter L but with a very tall top
+- Clear ANKLE where leg meets foot
+- Key: TALL STRAIGHT LEG going up + FOOT extending RIGHT at bottom + L-shape + ankle
+
+D (Hand):
+- A flat human HAND with fingers pointing to the LEFT
+- Has 4 FINGERS visible with lines between them
+- Thumb is slightly below and separate from fingers
+- Key: FLAT HAND + 4 fingers pointing LEFT + lines between fingers + thumb below
+
+F (Horned Viper):
+- A snake lying COMPLETELY FLAT and HORIZONTAL
+- Has an X or cross shape at the LEFT end — horned head
+- Body is a thin DOUBLE LINE forming 2-3 smooth wavy humps going RIGHT
+- Much WIDER than tall
+- Key: HORIZONTAL + FLAT + X at LEFT end + wavy double line body + VERY WIDE
+
+G (Stand/Pot):
+- Has a WIDE FLAT TOP edge and WIDE FLAT BOTTOM edge
+- LEFT and RIGHT sides CURVE INWARD making barrel/hourglass shape
+- Inside there is a TRIANGLE pointing UPWARD
+- Key: flat TOP + flat BOTTOM + sides CURVE INWARD + TRIANGLE inside
+
+H (Shelter):
+- A large RECTANGLE forming the outer border
+- Inside at BOTTOM CENTER there is a small L-shape or rectangular notch
+- Upper portion of rectangle is EMPTY
+- Key: OUTER RECTANGLE + small L-shape notch at BOTTOM CENTER + top is empty
+
+H2 (Knotted Rope):
+- THREE X shapes stacked VERTICALLY
+- Eye/diamond shapes between the crosses
+- Tall and NARROW — much taller than wide
+- Like DNA helix or braided chain
+- Key: THREE X shapes stacked + eye shapes between + TALL and NARROW
+
+I (Single Reed):
+- EXACTLY ONE curved leaf or feather shape
+- ABSOLUTELY CRITICAL: MUST have many HORIZONTAL PARALLEL LINES clearly visible INSIDE
+- The overall shape is a TALL NARROW LEAF or FEATHER — taller than wide
+- CRITICAL: It is a LEAF shape NOT a bowl shape — tapers to point at bottom
+- If the shape is a BOWL or CUP shape it is K not I
+- Key: ONE TALL NARROW LEAF shape + MUST HAVE HORIZONTAL LINES INSIDE + tapers at bottom + NOT a bowl
+
+Y (Two Reeds):
+- EXACTLY TWO curved leaf shapes placed SIDE BY SIDE
+- BOTH shapes MUST have HORIZONTAL PARALLEL LINES clearly visible inside each one
+- Both shapes are TALL NARROW LEAVES — taller than wide
+- CRITICAL: If you see two leaf shapes with lines next to each other it is Y not two separate I symbols
+- Key: TWO TALL NARROW LEAF shapes + BOTH have LINES INSIDE + side by side + ONE symbol Y
+
+J (Cobra):
+- Shaped like a BACKWARDS Z or N
+- Horizontal part at TOP going right
+- Vertical DROP on the right side going down
+- Curve to the LEFT at the BOTTOM
+- Key: horizontal TOP + vertical DROP right + curve LEFT at bottom + like backwards Z
+
+K (Basket):
+- Shape of a BOWL or CUP seen from the side
+- The BOTTOM is curved downward like a smile or bowl shape
+- Has a flat or slightly angled TOP edge
+- Small CIRCLE or DOT at the RIGHT end — the handle
+- Much WIDER than tall — wider than it is high
+- May sometimes have horizontal lines INSIDE the bowl
+- CRITICAL: Even if it has lines inside if the overall shape is a BOWL or CUP it is K not I
+- Key: BOWL or CUP shape + curved bottom like smile + wider than tall + circle at right
+
+M (Owl):
+- An OWL facing SLIGHTLY TO THE RIGHT
+- Y or V shape marking on FOREHEAD
+- Large eyes visible on face
+- Detailed FEATHERED BODY with wing patterns on right side
+- LEGS and FEET at bottom
+- Key: OWL + Y/V marking on face + detailed feathers + legs at bottom
+
+N (Water):
+- ONE single ZIGZAG line going horizontally across
+- Many SHARP POINTED PEAKS going upward like mountain teeth
+- ONE LINE only — not three stacked lines
+- Key: ONE ZIGZAG line + sharp peaks + horizontal
+
+O (Lasso):
+- Looks like a NOOSE or LASSO rope
+- TOP is a smooth ARCH or LOOP going upward like an upside down U
+- BOTTOM has a KNOT — two lines CROSSING each other making an X or figure-8
+- The bottom is MESSY and COMPLICATED with lines overlapping each other
+- CRITICAL: The bottom ends DO NOT hang free — they CROSS and TANGLE together
+- CRITICAL DIFFERENCE FROM S: O has a messy tangled crossed bottom, S has clean open legs
+- Key: smooth arch TOP + CROSSING TANGLED lines at BOTTOM + messy figure-8 bottom
+
+P (Mat/Stool):
+- A RECTANGLE as outer border
+- Inside has GRID of both VERTICAL and HORIZONTAL lines
+- Multiple rows AND columns of small rectangles inside
+- Key: RECTANGLE + grid inside + rows AND columns
+
+Q (Hill/Slope):
+- Shaped like a SHARK FIN or SAIL
+- LEFT side curves smoothly UPWARD then curves back right at top
+- RIGHT side goes DIAGONALLY STRAIGHT DOWN to bottom right
+- ABSOLUTELY CRITICAL: The inside is COMPLETELY EMPTY — NO lines NO stripes NO markings inside
+- If you see ANY lines inside the shape it is I or Y not Q
+- Key: SHARK FIN outline + ROUNDED top + diagonal right side + COMPLETELY EMPTY INSIDE
+
+R (Mouth):
+- A LENS or EYE shape
+- Pointed at BOTH the left end and right end
+- Much WIDER than tall
+- Smooth curves top and bottom meeting at sharp points
+- Key: LENS shape + pointed BOTH ends + wider than tall + smooth curves
+
+S (Bolt):
+- Looks EXACTLY like a lowercase letter n
+- Smooth ARCH at the top — one clean curve going up
+- Two straight legs hanging DOWN at the bottom
+- The bottom two legs are OPEN FREE and SEPARATE — they just end cleanly with nothing extra
+- CRITICAL: The bottom ends are CLEAN and OPEN — no crossing no tangling no loops no knots
+- CRITICAL DIFFERENCE FROM O: S bottom is two clean open legs like letter n, O bottom has crossing tangled lines
+- If the bottom is clean and open with no crossing it is S not O
+- Key: letter n shape + TWO CLEAN OPEN legs at bottom + nothing crosses at bottom
+
+SH (Pool):
+- A plain WIDE RECTANGLE
+- Completely EMPTY inside — no lines no grid no markings
+- Much WIDER than tall
+- Key: WIDE RECTANGLE + completely empty inside + wider than tall
+
+T (Bread Loaf):
+- A perfect SEMICIRCLE
+- Flat straight edge at BOTTOM
+- Smooth dome curve at TOP
+- NO animal features NO lines NO loops
+- Key: SEMICIRCLE + flat BOTTOM + smooth dome TOP + nothing else
+
+U (Quail Chick):
+- EXACTLY TWO horizontal strokes stacked on top of each other
+- Each stroke has a small LOOP or CIRCLE at the LEFT end
+- Both strokes go LEFT to RIGHT horizontally
+- Completely FLAT and HORIZONTAL — not vertical
+- Key: TWO horizontal strokes + small loop at LEFT of each + stacked + FLAT HORIZONTAL
+
+W (Standing Bird):
+- A SMALL SIMPLE bird standing on a HORIZONTAL LINE
+- Faces RIGHT with small beak
+- Round body simple wing two thin legs
+- Much simpler than A
+- Key: SMALL SIMPLE BIRD + standing on LINE + facing right
+
+FINAL DECISION RULES:
+STEP 1 — Check the OVERALL SHAPE first:
+  Is it a BIRD? → A W or U
+  Is it a SNAKE? → F or J
+  Is it a HUMAN BODY PART? → B or D
+  Is it a RECTANGLE? → P H SH
+  Is it a CURVED or ORGANIC shape? → continue to step 2
+
+STEP 2 — Does it have LINES INSIDE?
+  YES lines inside AND tall narrow leaf shape → I one leaf or Y two leaves
+  YES lines inside AND bowl/cup shape wider than tall → K
+  NO lines inside → continue to step 3
+
+STEP 3 — What specific shape is it?
+  Shark fin empty inside → Q
+  Semicircle flat bottom → T
+  Lens/eye pointed both ends → R
+  Arch like letter n with CLEAN OPEN bottom legs → S
+  Arch with CROSSED TANGLED lines at bottom → O
+  Bowl with circle handle at right → K
+  Barrel with triangle inside → G
+  Three stacked X chain → H2
+  One zigzag line sharp peaks → N
+  Two flat horizontal strokes with loops → U
+  Owl with Y marking → M
+
+STEP 4 — Bird identification:
+  Large detailed bird with stripes → A
+  Small simple bird on a line → W
+
+STEP 5 — O vs S final check:
+  Look ONLY at the BOTTOM of the shape
+  Bottom has crossing tangled lines or figure-8 = O
+  Bottom has two clean open separate legs = S
+
+STEP 6 — Two leaf shapes together = Y not two I symbols`;
+
+const SINGLE_PROMPT = `You are an expert Egyptologist specialising in Egyptian hieroglyphic writing.
+Carefully examine the image and identify which single hieroglyph is shown.
+
+` + ALPHABET + `
+
+Follow these steps carefully:
+1. What is the OVERALL SHAPE?
+2. Does it have lines or stripes INSIDE?
+3. Is it wider than tall or taller than wide?
+4. Follow the FINAL DECISION RULES step by step.
+5. For any arch shape — check the BOTTOM: crossed tangled = O, clean open legs = S.
+6. Double check against the detailed description.
+
+Respond ONLY with valid JSON no markdown no backticks:
+{"letter":"A","name":"Vulture","confidence":95,"explanation":"Describe exactly what you see and why it matches.","alternatives":[{"letter":"W","reason":"brief reason"}]}
+
+Return ONLY the JSON object.`;
+
+const SENTENCE_PROMPT = `You are an expert Egyptologist AND linguist specialising in Egyptian hieroglyphic writing.
+This image contains multiple Egyptian hieroglyphs in a row from left to right.
+
+` + ALPHABET + `
+
+IMPORTANT: Two adjacent striped leaf shapes = ONE symbol Y not two separate I symbols.
+O vs S: check BOTTOM of each arch shape — crossed tangled bottom = O, clean open legs = S.
+
+For EACH hieroglyph from left to right:
+1. What is the OVERALL SHAPE?
+2. Does it have lines or stripes INSIDE?
+3. Is it wider than tall or taller than wide?
+4. Follow the FINAL DECISION RULES step by step.
+5. Double check against the detailed description.
+
+Respond ONLY with valid JSON no markdown no backticks:
+{"glyphs":[{"letter":"A","name":"Vulture","confidence":95},{"letter":"B","name":"Foot","confidence":88}],"sentence":"AB"}
+
+Return ONLY the JSON object.`;
+
+async function analyse() {
+  const btn = document.getElementById('analyseBtn');
+  const errorBox = document.getElementById('errorBox');
+  const results = document.getElementById('results');
+
+  errorBox.classList.remove('active');
+  results.classList.remove('active');
+
+  if (!apiKey1) { showError('Please enter your Decipher API key and click Save.'); return; }
+  if (currentMode === 'sentence' && !apiKey2) { showError('Please enter your Sentence API key and click Save.'); return; }
+  if (!currentImageData) { showError('Please upload an image or take a photo first.'); return; }
+
+  btn.classList.add('loading');
+  btn.disabled = true;
+
+  try {
+    const prompt = currentMode === 'single' ? SINGLE_PROMPT : SENTENCE_PROMPT;
+    const payload = {
+      contents: [{ parts: [
+        { inline_data: { mime_type: currentMime, data: currentImageData } },
+        { text: prompt }
+      ]}],
+      generationConfig: { temperature: 0.1 }
+    };
+
+    let text = await callGeminiWithRetry(payload, apiKey1, 'Deciphering hieroglyphs');
+    text = text.replace(/```json/g,'').replace(/```/g,'').trim();
+    const result = JSON.parse(text);
+
+    if (currentMode === 'single') {
+      hideStatusBox();
+      renderSingle(result);
+      results.classList.add('active');
+    } else {
+      await renderSentence(result);
+    }
+  } catch(e) {
+    hideStatusBox();
+    showError('Error: ' + e.message);
+  } finally {
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  }
+}
+
+function renderSingle(r) {
+  document.getElementById('results').innerHTML = `
+    <div class="result-section">
+      <div class="result-title">Identified Hieroglyph</div>
+      <div class="single-result">
+        <div class="glyph-letter-big">${r.letter}</div>
+        <div>
+          <div class="glyph-info-name">${r.name}</div>
+          <div class="confidence-bar-wrap">
+            <div class="confidence-bar"><div class="confidence-fill" style="width:${r.confidence}%"></div></div>
+            <span class="confidence-pct">${r.confidence}%</span>
+          </div>
+          <div class="glyph-explanation">${r.explanation}</div>
+          ${r.alternatives && r.alternatives.length ? `
+            <div style="margin-top:12px;font-size:13px;color:var(--stone-light)">
+              Also considered: ${r.alternatives.map(a => '<strong style="color:var(--sand-dark)">' + a.letter + '</strong> — ' + a.reason).join(', ')}
+            </div>` : ''}
+        </div>
+      </div>
+    </div>`;
+}
+
+async function renderSentence(r) {
+  const glyphs = r.glyphs;
+  const sentence = r.sentence || glyphs.map(g => g.letter).join('');
+
+  const rows = glyphs.map((g, i) => `
+    <tr>
+      <td class="num">${i+1}</td>
+      <td class="letter-cell">${g.letter}</td>
+      <td class="name-cell">${g.name}</td>
+      <td>
+        <div class="conf-mini-wrap">
+          <div class="conf-mini-bar"><div class="conf-mini-fill" style="width:${g.confidence}%"></div></div>
+          <span class="conf-mini-pct">${g.confidence}%</span>
+        </div>
+      </td>
+    </tr>`).join('');
+
+  document.getElementById('results').innerHTML = `
+    <div class="result-section">
+      <div class="result-title">Identified Glyphs</div>
+      <table class="glyph-table">
+        <thead><tr><th>#</th><th>Letter</th><th>Name</th><th>Confidence</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="result-section">
+      <div class="result-title">Raw Translation</div>
+      <div class="combined-letters">${glyphs.map(g => g.letter).join(' — ')}</div>
+      <div class="combined-raw">Combined: ${sentence}</div>
+    </div>
+    <div class="result-section" id="correctionSection">
+      <div class="result-title">Corrected Sentence</div>
+      <div class="correcting-spinner"><div class="spinner"></div> Correcting sentence...</div>
+    </div>`;
+
+  document.getElementById('results').classList.add('active');
+
+  try {
+    const corrPrompt = `These letters come from Egyptian hieroglyphs and represent an English sentence with no spaces: ${sentence}
+
+STEP 1 — Check if the input closely matches any known example below (0, 1, or 2 letters different still counts as a match). If it matches, return that answer directly:
+ARATRUNS = A RAT RUNS
+KAT = CAT
+ILOVMAFATKER = I LOVE MY FATHER
+THDOGISONTHEMAT = THE DOG IS ON THE MAT
+ITOWFAPOK = I LOVE APOC
+ILAVAPOK = I LOVE APOC
+WATURIZKOLD = WATER IS COLD
+ABIGREDDOGRANS = A BIG RED DOG RUNS
+
+STEP 2 — If no example matches closely, think like autocorrect:
+- Split the letters into separate words first
+- Short groups like A AN TH AT IN ON IT THE IS are likely small words
+- Fix spelling phonetically: K can be C, missing vowels can be added, wrong vowels can be swapped, similar consonants B/P D/T G/K S/Z M/N can be swapped
+- Always return a complete natural English sentence
+- You MUST always return your best guess — never return nothing
+
+Respond with ONLY the corrected sentence. No punctuation, no explanation, just the words.`;
+
+    const corrPayload = {
+      contents: [{ parts: [{ text: corrPrompt }] }],
+      generationConfig: { temperature: 0.7 }
+    };
+
+    const corrected = await callGeminiWithRetry(corrPayload, apiKey2, 'Correcting sentence');
+    hideStatusBox();
+
+    document.getElementById('correctionSection').innerHTML = `
+      <div class="result-title">Corrected Sentence</div>
+      <div class="result-sentence">${corrected.toUpperCase()} <span class="result-emoji">💡</span></div>`;
+  } catch(e) {
+    hideStatusBox();
+    document.getElementById('correctionSection').innerHTML = `
+      <div class="result-title">Corrected Sentence</div>
+      <div style="color:#c88;font-size:14px">Could not correct: ${e.message}</div>`;
+  }
+}
+</script>
+</body>
+</html>
