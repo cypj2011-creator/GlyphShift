@@ -119,6 +119,8 @@ ITOWFAPOK = I LOVE APOC
 ILAVAPOK = I LOVE APOC
 WATURIZKOLD = WATER IS COLD
 ABIGREDDOGRANS = A BIG RED DOG RUNS
+ZIONLOFQAPOB = ZION LOVE APOC
+
 
 STEP 2 — If no example matches closely, think like autocorrect:
 - Split the letters into separate words first
