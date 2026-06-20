@@ -343,23 +343,22 @@
     <p class="subtitle">Decipher the ancient script</p>
   </header>
 
+  <!-- DRIVE PANEL -->
+  <div class="result-section" id="drivePanel">
+    <div class="result-title">📁 Save Results to Google Drive</div>
+    <div id="driveSignedOut">
+      <p style="font-size:14px;color:var(--sand-dark);margin-bottom:12px;">Sign in so every translation is automatically saved to Drive after it completes.</p>
+      <button class="camera-toggle" id="driveSignInBtn" onclick="driveSignIn()">🔑 &nbsp; Sign in with Google</button>
+    </div>
+    <div id="driveSignedIn" style="display:none;">
+      <p style="font-size:14px;color:var(--gold);margin-bottom:0;">✓ Signed in — results will be saved automatically.</p>
+    </div>
+  </div>
+
   <div class="divider">
     <div class="divider-line"></div>
     <span class="divider-symbol">𓆣</span>
     <div class="divider-line"></div>
-  </div>
-
-  <!-- DRIVE PANEL -->
-  <div class="result-section" id="drivePanel">
-    <div class="result-title">📁 Google Drive Auto-Import</div>
-    <div id="driveSignedOut">
-      <p style="font-size:14px;color:var(--sand-dark);margin-bottom:12px;">Sign in to automatically check the <strong>hieroglyph_input</strong> folder for new images.</p>
-      <button class="camera-toggle" id="driveSignInBtn" onclick="driveSignIn()">🔑 &nbsp; Sign in with Google</button>
-    </div>
-    <div id="driveSignedIn" style="display:none;">
-      <p style="font-size:14px;color:var(--sand-dark);margin-bottom:12px;" id="driveStatusText">Checking Drive folder...</p>
-      <div id="driveFileList"></div>
-    </div>
   </div>
 
   <div class="mode-tabs">
@@ -413,6 +412,7 @@
 let currentMode = 'single';
 let currentImageData = null;
 let currentMime = 'image/png';
+let currentFileName = 'hieroglyph.png';
 let cameraStream = null;
 let apiKey1 = localStorage.getItem('gemini_key1') || '';
 let apiKey2 = localStorage.getItem('gemini_key2') || '';
@@ -460,6 +460,7 @@ function setupDragDrop() {
 function handleFile(file) {
   if (!file) return;
   currentMime = file.type || 'image/png';
+  currentFileName = file.name || 'hieroglyph.png';
   const reader = new FileReader();
   reader.onload = e => {
     currentImageData = e.target.result.split(',')[1];
@@ -509,6 +510,7 @@ function capturePhoto() {
   const dataUrl = canvas.toDataURL('image/png');
   currentImageData = dataUrl.split(',')[1];
   currentMime = 'image/png';
+  currentFileName = 'capture_' + Date.now() + '.png';
   showPreview(dataUrl);
   closeCamera();
 }
@@ -939,6 +941,9 @@ function renderSingle(r) {
         </div>
       </div>
     </div>`;
+
+  const glyphsStr = `${r.letter} (${r.name}, ${r.confidence}%)`;
+  saveResultToDrive(currentFileName, null, glyphsStr, r.letter, r.name);
 }
 
 function buildCorrectionPrompt(sentence) {
@@ -953,8 +958,6 @@ ITOWFAPOK = I LOVE APOC
 ILAVAPOK = I LOVE APOC
 WATURIZKOLD = WATER IS COLD
 ABIGREDDOGRANS = A BIG RED DOG RUNS
-ARATRUNS = A RAT RUNS
-KAT = CAT
 ZIONLOFQAPOB = ZION-X LOVE APOC
 LIONK = ZION-X
 KION = ZION-X
@@ -963,11 +966,8 @@ FPOJ = APOC-X
 FPOC = APOC-X
 LOVB = LOVE
 FOVB = LOVE
-APOS - APOC
-RION = ZION-X
+APOS = APOC
 RIONLOFQAPOB = ZION-X LOVE APOC
-ZIONLOFQAPOB = ZION-X LOVE APOC
-
 
 STEP 2 — If no example matches closely, think like autocorrect:
 - Split the letters into separate words first
@@ -1056,6 +1056,9 @@ async function renderSentence(r) {
     document.getElementById('correctionSection').innerHTML = `
       <div class="result-title">Corrected Sentence</div>
       <div class="result-sentence">${corrected.toUpperCase()} <span class="result-emoji">💡</span></div>`;
+
+    const glyphsStr = glyphs.map(g => g.letter + ' (' + g.name + ', ' + g.confidence + '%)').join(', ');
+    saveResultToDrive(currentFileName, sentence, glyphsStr, sentence, corrected.toUpperCase());
   } catch(e) {
     hideStatusBox();
     document.getElementById('correctionSection').innerHTML = `
@@ -1065,13 +1068,12 @@ async function renderSentence(r) {
 }
 
 // ══════════════════════════════════════════════════════
-// GOOGLE DRIVE AUTO-IMPORT
+// GOOGLE DRIVE — SAVE RESULTS AFTER TRANSLATION
 // ══════════════════════════════════════════════════════
 
 const GOOGLE_CLIENT_ID = "1008633757133-p1jvimn4dhgaas591u7gltaa63qrg9l7.apps.googleusercontent.com";
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
-const INPUT_FOLDER_ID = "1A5cQ4p9v_A-0AZnDCbY-CZYqR6AwKNbU";
-const DONE_FOLDER_ID = "1B_2Ry2OBueNIOfm5FSxNAKsfKVTBzDib";
+const OUTPUT_FOLDER_ID = "1oKL7ap-9A22Kx9tZRbiNypMzkCHisU50";
 
 let driveAccessToken = null;
 let tokenClient = null;
@@ -1089,7 +1091,6 @@ function initGoogleAuth() {
         driveAccessToken = response.access_token;
         document.getElementById('driveSignedOut').style.display = 'none';
         document.getElementById('driveSignedIn').style.display = 'block';
-        checkDriveFolder();
       }
     }
   });
@@ -1103,105 +1104,6 @@ function driveSignIn() {
   tokenClient.requestAccessToken();
 }
 
-async function checkDriveFolder() {
-  if (!apiKey1 || !apiKey2) {
-    document.getElementById('driveStatusText').textContent =
-      '⚠ Please enter and save both API keys above first.';
-    return;
-  }
-
-  const statusEl = document.getElementById('driveStatusText');
-  const listEl = document.getElementById('driveFileList');
-  statusEl.textContent = 'Checking hieroglyph_input folder...';
-  listEl.innerHTML = '';
-
-  try {
-    const query = `'${INPUT_FOLDER_ID}' in parents and trashed = false and mimeType contains 'image/'`;
-    const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType)`;
-
-    const resp = await fetch(url, {
-      headers: { 'Authorization': 'Bearer ' + driveAccessToken }
-    });
-    if (!resp.ok) throw new Error('Drive API error: HTTP ' + resp.status);
-    const data = await resp.json();
-    const files = data.files || [];
-
-    if (files.length === 0) {
-      statusEl.textContent = '✓ No new images in hieroglyph_input folder.';
-      return;
-    }
-
-    statusEl.textContent = `Found ${files.length} new image(s). Processing...`;
-
-    for (const file of files) {
-      const itemEl = document.createElement('div');
-      itemEl.style.padding = '10px';
-      itemEl.style.marginBottom = '8px';
-      itemEl.style.background = 'rgba(201,168,76,0.05)';
-      itemEl.style.borderRadius = '6px';
-      itemEl.style.fontSize = '13px';
-      itemEl.textContent = `⏳ ${file.name} — downloading...`;
-      listEl.appendChild(itemEl);
-
-      try {
-        await processDriveFile(file, itemEl);
-      } catch (e) {
-        itemEl.textContent = `✗ ${file.name} — error: ${e.message}`;
-        itemEl.style.color = '#c88';
-      }
-    }
-
-    statusEl.textContent = `✓ Done processing ${files.length} image(s).`;
-
-  } catch (e) {
-    statusEl.textContent = '✗ Error checking Drive: ' + e.message;
-  }
-}
-
-async function processDriveFile(file, itemEl) {
-  // Download the image
-  const downloadUrl = `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`;
-  const fileResp = await fetch(downloadUrl, {
-    headers: { 'Authorization': 'Bearer ' + driveAccessToken }
-  });
-  if (!fileResp.ok) throw new Error('download failed HTTP ' + fileResp.status);
-  const blob = await fileResp.blob();
-
-  const base64Data = await blobToBase64(blob);
-
-  itemEl.textContent = `🔍 ${file.name} — translating...`;
-
-  // Run the same translation logic as manual mode
-  const result = await translateImage(base64Data, file.mimeType);
-
-  itemEl.textContent = `✓ ${file.name} — ${result.corrected}`;
-  itemEl.style.color = 'var(--gold)';
-
-  // Also show in main results area
-  renderSingleDriveResult(file.name, result);
-
-  // Build the text report
-  const report =
-    "File: " + file.name + "\n" +
-    "Glyphs: " + result.glyphsStr + "\n" +
-    "Combined letters: " + result.combined + "\n" +
-    "Corrected sentence: " + result.corrected + "\n";
-
-  const dotIndex = file.name.lastIndexOf(".");
-  const baseName = dotIndex > 0 ? file.name.substring(0, dotIndex) : file.name;
-  const ext = dotIndex > 0 ? file.name.substring(dotIndex) : '';
-
-  // Upload image to done folder
-  await driveUploadFile(file.name, blob, file.mimeType, DONE_FOLDER_ID);
-
-  // Upload text report to done folder
-  const reportBlob = new Blob([report], { type: 'text/plain' });
-  await driveUploadFile(baseName + '_result.txt', reportBlob, 'text/plain', DONE_FOLDER_ID);
-
-  // Delete original from input folder
-  await driveDeleteFile(file.id);
-}
-
 function blobToBase64(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1209,6 +1111,13 @@ function blobToBase64(blob) {
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
+}
+
+function base64ToBlob(base64Data, mimeType) {
+  const byteChars = atob(base64Data);
+  const byteNumbers = new Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+  return new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
 }
 
 async function driveUploadFile(name, blob, mimeType, parentFolderId) {
@@ -1222,47 +1131,48 @@ async function driveUploadFile(name, blob, mimeType, parentFolderId) {
     headers: { 'Authorization': 'Bearer ' + driveAccessToken },
     body: form
   });
-  if (!resp.ok) throw new Error('upload failed HTTP ' + resp.status);
+  if (!resp.ok) throw new Error('Drive upload failed HTTP ' + resp.status);
   return resp.json();
 }
 
-async function driveDeleteFile(fileId) {
-  const resp = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
-    method: 'DELETE',
-    headers: { 'Authorization': 'Bearer ' + driveAccessToken }
-  });
-  if (!resp.ok) throw new Error('delete failed HTTP ' + resp.status);
+// Called automatically after a translation finishes, if signed in to Drive
+async function saveResultToDrive(originalFileName, sentence, glyphsStr, combined, corrected) {
+  if (!driveAccessToken) return; // not signed in — skip silently
+
+  try {
+    const dotIndex = originalFileName.lastIndexOf(".");
+    const baseName = dotIndex > 0 ? originalFileName.substring(0, dotIndex) : originalFileName;
+    const ext = dotIndex > 0 ? originalFileName.substring(dotIndex) : '.png';
+
+    const report =
+      "File: " + originalFileName + "\n" +
+      "Glyphs: " + glyphsStr + "\n" +
+      "Combined letters: " + combined + "\n" +
+      "Corrected sentence: " + corrected + "\n";
+
+    // Upload the image
+    const imageBlob = base64ToBlob(currentImageData, currentMime);
+    await driveUploadFile(originalFileName, imageBlob, currentMime, OUTPUT_FOLDER_ID);
+
+    // Upload the text result
+    const reportBlob = new Blob([report], { type: 'text/plain' });
+    await driveUploadFile(baseName + '_result.txt', reportBlob, 'text/plain', OUTPUT_FOLDER_ID);
+
+    showDriveSavedBadge();
+  } catch (e) {
+    console.error('Drive save failed:', e);
+  }
 }
 
-function renderSingleDriveResult(fileName, result) {
-  const rows = result.glyphs.map((g, i) => `
-    <tr>
-      <td class="num">${i+1}</td>
-      <td class="letter-cell">${g.letter}</td>
-      <td class="name-cell">${g.name}</td>
-      <td>
-        <div class="conf-mini-wrap">
-          <div class="conf-mini-bar"><div class="conf-mini-fill" style="width:${g.confidence}%"></div></div>
-          <span class="conf-mini-pct">${g.confidence}%</span>
-        </div>
-      </td>
-    </tr>`).join('');
+function showDriveSavedBadge() {
+  const existing = document.getElementById('driveSavedBadge');
+  if (existing) existing.remove();
 
-  const block = document.createElement('div');
-  block.innerHTML = `
-    <div class="result-section">
-      <div class="result-title">📁 Drive: ${fileName}</div>
-      <table class="glyph-table">
-        <thead><tr><th>#</th><th>Letter</th><th>Name</th><th>Confidence</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <div class="combined-raw" style="margin-top:10px">Combined: ${result.combined}</div>
-      <div class="result-sentence" style="margin-top:10px">${result.corrected} <span class="result-emoji">💡</span></div>
-    </div>`;
-
-  const results = document.getElementById('results');
-  results.appendChild(block);
-  results.classList.add('active');
+  const badge = document.createElement('div');
+  badge.id = 'driveSavedBadge';
+  badge.style.cssText = 'margin-top:10px;font-size:13px;color:var(--gold);display:flex;align-items:center;gap:6px;';
+  badge.innerHTML = '📁 Saved to Google Drive';
+  document.getElementById('results').appendChild(badge);
 }
 
 // Init Google auth on load
