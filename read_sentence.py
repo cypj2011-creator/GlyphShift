@@ -129,6 +129,7 @@ LOVB = LOVE
 FOVB = LOVE
 APOS = APOC
 RIONLOFQAPOB = ZION-X LOVE APOC
+RIONFOQBAPOB = ZION-X LOVE APOC
 
 STEP 2 — If no example matches closely, think like autocorrect:
 - Split the letters into separate words first
