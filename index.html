@@ -1258,27 +1258,41 @@ async function driveUploadFile(name, blob, mimeType, parentFolderId) {
 }
 
 // Called automatically after a translation finishes, if signed in to Drive
+function getTimestamp12hr() {
+  const now = new Date();
+  let hours = now.getHours();
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = now.getFullYear();
+  return `${day}/${month}/${year} ${hours}:${minutes}:${seconds} ${ampm}`;
+}
+
 async function saveResultToDrive(originalFileName, sentence, glyphsStr, combined, corrected) {
   if (!driveAccessToken) return; // not signed in — skip silently
 
   try {
+    const timestamp = getTimestamp12hr();
+    const safeTimestamp = timestamp.replace(/[/:]/g, '-');
     const dotIndex = originalFileName.lastIndexOf(".");
-    const baseName = dotIndex > 0 ? originalFileName.substring(0, dotIndex) : originalFileName;
     const ext = dotIndex > 0 ? originalFileName.substring(dotIndex) : '.png';
 
     const report =
-      "File: " + originalFileName + "\n" +
-      "Glyphs: " + glyphsStr + "\n" +
-      "Combined letters: " + combined + "\n" +
-      "Corrected sentence: " + corrected + "\n";
+      "Timestamp: " + timestamp + "\n" +
+      "Status: Success\n" +
+      "Raw Translation: " + combined + "\n" +
+      "Corrected Sentence: " + corrected + "\n";
 
-    // Upload the image
+    // Upload the image — named with timestamp only
     const imageBlob = base64ToBlob(currentImageData, currentMime);
-    await driveUploadFile(originalFileName, imageBlob, currentMime, OUTPUT_FOLDER_ID);
+    await driveUploadFile(safeTimestamp + ext, imageBlob, currentMime, OUTPUT_FOLDER_ID);
 
-    // Upload the text result
+    // Upload the text result — named with timestamp + status
     const reportBlob = new Blob([report], { type: 'text/plain' });
-    await driveUploadFile(baseName + '_result.txt', reportBlob, 'text/plain', OUTPUT_FOLDER_ID);
+    await driveUploadFile(safeTimestamp + '_SUCCESS.txt', reportBlob, 'text/plain', OUTPUT_FOLDER_ID);
 
     showDriveSavedBadge();
   } catch (e) {
