@@ -1170,12 +1170,13 @@ async function renderSentence(r) {
     return `
     <tr>
       <td class="num">${i+1}</td>
-      <td class="letter-cell" style="${isWrong ? 'color:#d88;' : ''}">${g.letter}${isWrong ? ' <span style="color:#d88;font-size:14px;">✗</span>' : ''}</td>
+      <td class="letter-cell" style="${isWrong ? 'color:#d88;' : ''}">${g.letter}</td>
       <td class="name-cell">${g.name}</td>
       <td>
         <div class="conf-mini-wrap">
           <div class="conf-mini-bar"><div class="conf-mini-fill" style="width:${g.confidence}%;${isWrong ? 'background:linear-gradient(90deg,#8b2020,#d88);' : ''}"></div></div>
           <span class="conf-mini-pct" style="${isWrong ? 'color:#d88;' : ''}">${g.confidence}%</span>
+          ${isWrong ? '<span style="color:#d88;font-size:13px;margin-left:6px;">✗</span>' : ''}
         </div>
       </td>
     </tr>`;
