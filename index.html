@@ -943,22 +943,55 @@ Respond ONLY with valid JSON no markdown no backticks:
 Return ONLY the JSON object.`;
 
 // ── FAKE DEMO DATA ──
-const FAKE_GLYPHS = [
-  { letter: "R", name: "Mouth", confidence: 82 },
-  { letter: "I", name: "Single Reed", confidence: 91 },
-  { letter: "O", name: "Lasso", confidence: 78 },
-  { letter: "N", name: "Water", confidence: 95 },
-  { letter: "F", name: "Horned Viper", confidence: 74 },
-  { letter: "O", name: "Lasso", confidence: 88 },
-  { letter: "Q", name: "Hill/Slope", confidence: 71 },
-  { letter: "B", name: "Foot and Leg", confidence: 69 },
-  { letter: "A", name: "Vulture", confidence: 93 },
-  { letter: "P", name: "Mat/Stool", confidence: 87 },
-  { letter: "O", name: "Lasso", confidence: 90 },
-  { letter: "B", name: "Foot and Leg", confidence: 73 }
+const CORRECT_SENTENCE = "ZIONXLOVEAPOC"; // letters without spaces/dashes
+const CORRECT_GLYPHS = [
+  { letter: "Z", name: "Door Bolt" },
+  { letter: "I", name: "Single Reed" },
+  { letter: "O", name: "Lasso" },
+  { letter: "N", name: "Water" },
+  { letter: "X", name: "Basket + Reed" },
+  { letter: "L", name: "Lion" },
+  { letter: "O", name: "Lasso" },
+  { letter: "V", name: "Horned Viper variant" },
+  { letter: "E", name: "Two Reeds" },
+  { letter: "A", name: "Vulture" },
+  { letter: "P", name: "Mat/Stool" },
+  { letter: "O", name: "Lasso" },
+  { letter: "C", name: "Basket" }
 ];
-const FAKE_SENTENCE = "RIONFOQBAPOB";
 const FAKE_CORRECTED = "ZION-X LOVE APOC";
+const ALPHABET_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+function generateFakeGlyphs() {
+  // Clone correct glyphs
+  const glyphs = CORRECT_GLYPHS.map(g => ({ ...g, wrong: false }));
+
+  // Pick 2 or 3 random positions to corrupt
+  const numWrong = Math.random() < 0.5 ? 2 : 3;
+  const indices = [];
+  while (indices.length < numWrong) {
+    const idx = Math.floor(Math.random() * glyphs.length);
+    if (!indices.includes(idx)) indices.push(idx);
+  }
+
+  // Replace each chosen position with a random different letter
+  indices.forEach(idx => {
+    let randomLetter;
+    do {
+      randomLetter = ALPHABET_LETTERS[Math.floor(Math.random() * ALPHABET_LETTERS.length)];
+    } while (randomLetter === glyphs[idx].letter);
+    glyphs[idx].letter = randomLetter;
+    glyphs[idx].wrong = true;
+    glyphs[idx].confidence = Math.floor(Math.random() * 20) + 60; // 60-79%
+  });
+
+  // Assign confidence to correct ones
+  glyphs.forEach(g => {
+    if (!g.wrong) g.confidence = Math.floor(Math.random() * 15) + 82; // 82-96%
+  });
+
+  return glyphs;
+}
 
 let devMode = false;
 
@@ -989,18 +1022,21 @@ async function analyse() {
     await sleep(1500);
     hideStatusBox();
 
+    const fakeGlyphs = generateFakeGlyphs();
+    const fakeSentence = fakeGlyphs.map(g => g.letter).join('');
+
     if (currentMode === 'single') {
       renderSingle({
-        letter: "R", name: "Mouth", confidence: 82,
+        letter: "R", name: "Mouth", confidence: 72,
         explanation: "The shape appears as a lens or eye shape, pointed at both ends, wider than tall. Matched to R (Mouth).",
         alternatives: [{ letter: "O", reason: "Similar curved outline but O has tangled bottom" }]
       });
       results.classList.add('active');
     } else {
-      await renderSentence({ glyphs: FAKE_GLYPHS, sentence: FAKE_SENTENCE });
+      await renderSentence({ glyphs: fakeGlyphs, sentence: fakeSentence });
     }
 
-    saveResultToDrive(currentFileName, FAKE_SENTENCE, FAKE_GLYPHS.map(g => g.letter + ' (' + g.name + ', ' + g.confidence + '%)').join(', '), FAKE_SENTENCE, FAKE_CORRECTED);
+    saveResultToDrive(currentFileName, fakeSentence, fakeGlyphs.map(g => g.letter + ' (' + g.name + ', ' + g.confidence + '%)').join(', '), fakeSentence, FAKE_CORRECTED);
 
   } else {
     // ── REAL MODE ──
@@ -1129,18 +1165,28 @@ async function renderSentence(r) {
   const glyphs = r.glyphs;
   const sentence = r.sentence || glyphs.map(g => g.letter).join('');
 
-  const rows = glyphs.map((g, i) => `
+  const rows = glyphs.map((g, i) => {
+    const isWrong = devMode && g.wrong;
+    return `
     <tr>
       <td class="num">${i+1}</td>
-      <td class="letter-cell">${g.letter}</td>
+      <td class="letter-cell" style="${isWrong ? 'color:#d88;' : ''}">${g.letter}${isWrong ? ' <span style="color:#d88;font-size:14px;">✗</span>' : ''}</td>
       <td class="name-cell">${g.name}</td>
       <td>
         <div class="conf-mini-wrap">
-          <div class="conf-mini-bar"><div class="conf-mini-fill" style="width:${g.confidence}%"></div></div>
-          <span class="conf-mini-pct">${g.confidence}%</span>
+          <div class="conf-mini-bar"><div class="conf-mini-fill" style="width:${g.confidence}%;${isWrong ? 'background:linear-gradient(90deg,#8b2020,#d88);' : ''}"></div></div>
+          <span class="conf-mini-pct" style="${isWrong ? 'color:#d88;' : ''}">${g.confidence}%</span>
         </div>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
+
+  // Build combined display — wrong letters shown in red with ✗
+  const combinedDisplay = glyphs.map(g =>
+    devMode && g.wrong
+      ? `<span style="color:#d88;">${g.letter}✗</span>`
+      : g.letter
+  ).join(' — ');
 
   document.getElementById('results').innerHTML = `
     <div class="result-section">
@@ -1152,7 +1198,7 @@ async function renderSentence(r) {
     </div>
     <div class="result-section">
       <div class="result-title">Raw Translation</div>
-      <div class="combined-letters">${glyphs.map(g => g.letter).join(' — ')}</div>
+      <div class="combined-letters">${combinedDisplay}</div>
       <div class="combined-raw">Combined: ${sentence}</div>
     </div>
     <div class="result-section" id="correctionSection">
