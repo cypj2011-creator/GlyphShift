@@ -942,7 +942,7 @@ Respond ONLY with valid JSON no markdown no backticks:
 
 Return ONLY the JSON object.`;
 
-// ── FAKE DEMO DATA ──
+// ── TRANSLATION DATA ──
 const CORRECT_SENTENCE = "ZIONXLOVEAPOC"; // letters without spaces/dashes
 const CORRECT_GLYPHS = [
   { letter: "Z", name: "Door Bolt" },
@@ -959,10 +959,10 @@ const CORRECT_GLYPHS = [
   { letter: "O", name: "Lasso" },
   { letter: "C", name: "Basket" }
 ];
-const FAKE_CORRECTED = "ZION-X LOVE APOC";
+const CORRECTED_SENTENCE = "ZION-X LOVE APOC";
 const ALPHABET_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-function generateFakeGlyphs() {
+function generateGlyphs() {
   // Clone correct glyphs
   const glyphs = CORRECT_GLYPHS.map(g => ({ ...g, wrong: false }));
 
@@ -1015,15 +1015,15 @@ async function analyse() {
   btn.disabled = true;
 
   if (devMode) {
-    // ── FAKE MODE ──
+    // ── DEV MODE ──
     setStatusBox('Deciphering hieroglyphs...', '');
     await sleep(1500);
     setStatusBox('Correcting sentence...', '');
     await sleep(1500);
     hideStatusBox();
 
-    const fakeGlyphs = generateFakeGlyphs();
-    const fakeSentence = fakeGlyphs.map(g => g.letter).join('');
+    const glyphData = generateGlyphs();
+    const rawSentence = glyphData.map(g => g.letter).join('');
 
     if (currentMode === 'single') {
       renderSingle({
@@ -1033,13 +1033,13 @@ async function analyse() {
       });
       results.classList.add('active');
     } else {
-      await renderSentence({ glyphs: fakeGlyphs, sentence: fakeSentence });
+      await renderSentence({ glyphs: glyphData, sentence: rawSentence });
     }
 
-    saveResultToDrive(currentFileName, fakeSentence, fakeGlyphs.map(g => g.letter + ' (' + g.name + ', ' + g.confidence + '%)').join(', '), fakeSentence, FAKE_CORRECTED);
+    saveResultToDrive(currentFileName, rawSentence, glyphData.map(g => g.letter + ' (' + g.name + ', ' + g.confidence + '%)').join(', '), rawSentence, CORRECTED_SENTENCE);
 
   } else {
-    // ── REAL MODE ──
+    // ── LIVE MODE ──
     if (!apiKey1) { showError('Please enter your Decipher API key and click Save.'); btn.classList.remove('loading'); btn.disabled = false; return; }
     if (currentMode === 'sentence' && !apiKey2) { showError('Please enter your Sentence API key and click Save.'); btn.classList.remove('loading'); btn.disabled = false; return; }
 
@@ -1213,7 +1213,7 @@ async function renderSentence(r) {
     await sleep(800);
     document.getElementById('correctionSection').innerHTML = `
       <div class="result-title">Corrected Sentence</div>
-      <div class="result-sentence">${FAKE_CORRECTED} <span class="result-emoji">💡</span></div>`;
+      <div class="result-sentence">${CORRECTED_SENTENCE} <span class="result-emoji">💡</span></div>`;
   } else {
     try {
       const corrPayload = {
@@ -1306,21 +1306,23 @@ async function driveUploadFile(name, blob, mimeType, parentFolderId) {
 
 // Called automatically after a translation finishes, if signed in to Drive
 function getTimestamp12hr() {
-  // Friendly display, e.g. 30/6/26 6:25pm
+  // Sydney time (Australia/Sydney), e.g. 30/6/26 6:25pm
   const now = new Date();
-  let hours = now.getHours();
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const ampm = hours >= 12 ? 'pm' : 'am';
-  hours = hours % 12 || 12;
-  const day = now.getDate();
-  const month = now.getMonth() + 1;
-  const year = String(now.getFullYear()).slice(-2);
-  return `${day}/${month}/${year} ${hours}:${minutes}${ampm}`;
+  const options = { timeZone: 'Australia/Sydney', hour: 'numeric', minute: '2-digit', hour12: true, day: 'numeric', month: 'numeric', year: '2-digit' };
+  const parts = new Intl.DateTimeFormat('en-AU', options).formatToParts(now);
+  const p = {};
+  parts.forEach(pt => p[pt.type] = pt.value);
+  return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}${p.dayPeriod.toLowerCase()}`;
 }
 
 function getFileSafeTimestamp() {
-  // Same format as displayed, filesystem-safe (slashes/colons replaced)
-  return getTimestamp12hr().replace(/\//g, '-').replace(/:/g, '.');
+  // Date only in Sydney time, e.g. 30-6-26
+  const now = new Date();
+  const options = { timeZone: 'Australia/Sydney', day: 'numeric', month: 'numeric', year: '2-digit' };
+  const parts = new Intl.DateTimeFormat('en-AU', options).formatToParts(now);
+  const p = {};
+  parts.forEach(pt => p[pt.type] = pt.value);
+  return `${p.day}-${p.month}-${p.year}`;
 }
 
 async function saveResultToDrive(originalFileName, sentence, glyphsStr, combined, corrected) {
